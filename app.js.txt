@@ -1,0 +1,195 @@
+// Simple Snake game (works on desktop and mobile buttons)
+//
+// Grid-based canvas snake. Use arrow keys or on-screen buttons.
+// Score saved to localStorage as "tk_snake_best".
+
+const canvas = document.getElementById('gameCanvas')
+const ctx = canvas.getContext('2d')
+const scoreEl = document.getElementById('score')
+const bestEl = document.getElementById('best')
+const startBtn = document.getElementById('startBtn')
+const pauseBtn = document.getElementById('pauseBtn')
+const resetBtn = document.getElementById('resetBtn')
+const upBtn = document.getElementById('up')
+const downBtn = document.getElementById('down')
+const leftBtn = document.getElementById('left')
+const rightBtn = document.getElementById('right')
+
+const GRID = 20          // cell size in px
+const COLS = Math.floor(canvas.width / GRID)
+const ROWS = Math.floor(canvas.height / GRID)
+
+let snake = []
+let dir = {x:1, y:0}
+let food = null
+let running = false
+let gameInterval = null
+let speed = 120   // ms per tick
+let score = 0
+let best = parseInt(localStorage.getItem('tk_snake_best')||'0',10)
+
+// initialize
+bestEl.textContent = best
+
+function resetGame(){
+  snake = [{x:Math.floor(COLS/2), y:Math.floor(ROWS/2)}]
+  dir = {x:1, y:0}
+  spawnFood()
+  score = 0
+  scoreEl.textContent = score
+  running = false
+  clearInterval(gameInterval)
+  draw()
+}
+
+function spawnFood(){
+  let tries = 0
+  while(true){
+    const x = Math.floor(Math.random()*COLS)
+    const y = Math.floor(Math.random()*ROWS)
+    if(!snake.some(s=>s.x===x && s.y===y)){
+      food = {x,y}
+      return
+    }
+    if(++tries>200) { food = {x:0,y:0}; return }
+  }
+}
+
+function tick(){
+  // new head
+  const head = {...snake[0]}
+  head.x += dir.x
+  head.y += dir.y
+
+  // wrap around edges
+  if(head.x < 0) head.x = COLS - 1
+  if(head.x >= COLS) head.x = 0
+  if(head.y < 0) head.y = ROWS - 1
+  if(head.y >= ROWS) head.y = 0
+
+  // collision with self
+  if(snake.some(s => s.x===head.x && s.y===head.y)){
+    gameOver()
+    return
+  }
+
+  snake.unshift(head)
+
+  // eat food?
+  if(food && head.x===food.x && head.y===food.y){
+    score += 1
+    scoreEl.textContent = score
+    spawnFood()
+    // speed up a little every 5 points
+    if(score % 5 === 0 && speed > 40){
+      speed -= 8
+      restartInterval()
+    }
+  } else {
+    snake.pop()
+  }
+
+  draw()
+}
+
+function draw(){
+  // clear
+  ctx.fillStyle = '#06121a'
+  ctx.fillRect(0,0,canvas.width,canvas.height)
+
+  // draw food
+  if(food){
+    ctx.fillStyle = '#ffd166'
+    drawCell(food.x, food.y)
+  }
+
+  // draw snake - head brighter
+  snake.forEach((s, i) => {
+    ctx.fillStyle = i===0 ? '#ff6b6b' : '#ff9b9b'
+    drawCell(s.x, s.y)
+  })
+}
+
+function drawCell(cx, cy){
+  ctx.fillRect(cx*GRID + 1, cy*GRID + 1, GRID-2, GRID-2)
+}
+
+function startGame(){
+  if(running) return
+  running = true
+  restartInterval()
+}
+
+function restartInterval(){
+  clearInterval(gameInterval)
+  gameInterval = setInterval(tick, speed)
+}
+
+function pauseGame(){
+  running = !running
+  if(running) restartInterval()
+  else clearInterval(gameInterval)
+}
+
+function gameOver(){
+  clearInterval(gameInterval)
+  running = false
+  alert('Game over! Điểm: ' + score)
+  if(score > best){
+    best = score
+    localStorage.setItem('tk_snake_best', best)
+    bestEl.textContent = best
+  }
+  // reset but keep best
+  resetGame()
+}
+
+function setDirection(dx, dy){
+  // prevent reverse directly
+  if(snake.length>1 && dx === -dir.x && dy === -dir.y) return
+  dir = {x:dx, y:dy}
+}
+
+// keyboard controls
+window.addEventListener('keydown', (e) => {
+  if(e.key === 'ArrowUp') setDirection(0,-1)
+  if(e.key === 'ArrowDown') setDirection(0,1)
+  if(e.key === 'ArrowLeft') setDirection(-1,0)
+  if(e.key === 'ArrowRight') setDirection(1,0)
+  if(e.key === ' '){ e.preventDefault(); if(!running) startGame(); else pauseGame() }
+})
+
+// mobile buttons
+upBtn.addEventListener('click', ()=> setDirection(0,-1))
+downBtn.addEventListener('click', ()=> setDirection(0,1))
+leftBtn.addEventListener('click', ()=> setDirection(-1,0))
+rightBtn.addEventListener('click', ()=> setDirection(1,0))
+
+// action buttons
+startBtn.addEventListener('click', ()=> startGame())
+pauseBtn.addEventListener('click', ()=> pauseGame())
+resetBtn.addEventListener('click', ()=> { resetGame(); startGame() })
+
+// touch swipe support (simple)
+let touchStart = null
+canvas.addEventListener('touchstart', e => {
+  const t = e.touches[0]
+  touchStart = {x: t.clientX, y: t.clientY}
+})
+canvas.addEventListener('touchend', e => {
+  if(!touchStart) return
+  const t = e.changedTouches[0]
+  const dx = t.clientX - touchStart.x
+  const dy = t.clientY - touchStart.y
+  if(Math.abs(dx) > Math.abs(dy)){
+    if(dx > 20) setDirection(1,0)
+    else if(dx < -20) setDirection(-1,0)
+  } else {
+    if(dy > 20) setDirection(0,1)
+    else if(dy < -20) setDirection(0,-1)
+  }
+  touchStart = null
+})
+
+// initial
+resetGame()
